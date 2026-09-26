@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Kindred Garden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    color-scheme: dark;
+    --ink:#EEF1E8;
+    --ink-dim:rgba(238,241,232,.66);
+    --panel:rgba(14,20,30,.62);
+    --panel-solid:rgba(14,20,30,.86);
+    --line:rgba(238,241,232,.18);
+    --accent:#F2C66D;
+    --night:#0E1526;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;background:var(--night);color:var(--ink);
+    font:13px/1.45 "IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    overflow:hidden;-webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:manipulation;cursor:crosshair}
+  .hud{
+    position:fixed;left:16px;top:calc(env(safe-area-inset-top,0px) + 14px);
+    padding:10px 14px 11px;border-radius:14px;background:var(--panel);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border:1px solid var(--line);max-width:calc(100% - 64px);pointer-events:none;
+  }
+  .hud h1{font:400 22px/1.1 "Young Serif",Georgia,"Times New Roman",serif;margin:0 0 4px;letter-spacing:.005em}
+  .stats{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);font-variant-numeric:tabular-nums}
+  .stats b{color:var(--ink);font-weight:500}
+  .bar{
+    position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;pointer-events:none;
+  }
+  .hint{flex:1 1 180px;font-size:11.5px;color:var(--ink-dim);text-shadow:0 1px 6px rgba(0,0,0,.6)}
+  .btn{
+    pointer-events:auto;font:500 12px/1 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.04em;
+    color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    padding:10px 14px;cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  }
+  .btn:hover{border-color:rgba(238,241,232,.4)}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .card{
+    position:fixed;left:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 66px);
+    width:min(340px,calc(100% - 32px));box-sizing:border-box;
+    background:var(--panel-solid);border:1px solid var(--line);border-radius:16px;
+    padding:14px 16px 15px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    box-shadow:0 12px 40px rgba(0,0,0,.35);
+  }
+  .card-top{display:flex;gap:12px;align-items:flex-start}
+  .swatch{width:30px;height:30px;border-radius:50%;flex:none;margin-top:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+  .card h2{font:400 19px/1.2 "Young Serif",Georgia,serif;margin:0;font-style:normal;text-wrap:balance}
+  .gen{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-top:3px}
+  .close{margin-left:auto;background:none;border:0;color:var(--ink-dim);font:400 20px/1 system-ui,sans-serif;cursor:pointer;padding:2px 4px}
+  .close:focus-visible{outline:2px solid var(--accent);border-radius:6px}
+  dl{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;margin:12px 0 0;font-size:12px}
+  dt{color:var(--ink-dim);letter-spacing:.04em}
+  dd{margin:0;overflow-wrap:anywhere}
+  .toast{
+    position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 96px);transform:translateX(-50%);
+    background:var(--panel-solid);border:1px solid var(--line);border-radius:999px;padding:8px 14px;
+    font-size:12px;white-space:nowrap;max-width:calc(100% - 32px);overflow:hidden;text-overflow:ellipsis;
+  }
+</style>
+
+<canvas id="c" aria-label="A garden of procedurally grown flowers. Tap the soil to plant a seed; tap a flower to learn about it."></canvas>
+
+<div class="hud">
+  <h1>Kindred Garden</h1>
+  <div class="stats" id="stats">&nbsp;</div>
+</div>
+
+<div class="card" id="card" hidden>
+  <div class="card-top">
+    <div class="swatch" id="sw"></div>
+    <div>
+      <h2 id="cName"></h2>
+      <div class="gen" id="cGen"></div>
+    </div>
+    <button class="close" id="cClose" aria-label="Close">×</button>
+  </div>
+  <dl>
+    <dt>Parents</dt><dd id="cPar"></dd>
+    <dt>Now</dt><dd id="cNow"></dd>
+    <dt>Traits</dt><dd id="cTr"></dd>
+  </dl>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<div class="bar">
+  <div class="hint" id="hint">Tap the soil to plant a seed. Tap a flower to meet it. Moths carry pollen between blooms, and every cross is a new plant.</div>
+  <button class="btn" id="bWild">Scatter wildflowers</button>
+  <button class="btn" id="bSpeed" aria-label="Simulation speed">1×</button>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- utilities ----------
+  const R = (a, b) => a + Math.random() * (b - a);
+  const RI = (a, b) => Math.floor(R(a, b + 1));
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const gauss = () => { let u = 0; while (!u) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); };
+  function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ---------- genetics ----------
+  function wild() {
+    return {
+      hue: R(0, 360), shift: R(-70, 70), sat: R(52, 88), lum: R(54, 72),
+      petals: RI(4, 10), point: R(0, 1), plen: R(.75, 1.35), pwid: R(.35, .8),
+      height: R(.45, 1), heads: RI(1, 3), leaf: R(.15, 1), leafHue: R(85, 150),
+      curve: R(-1, 1), life: R(.85, 1.25), layers: Math.random() < .4 ? 2 : 1, disk: R(0, 1)
+    };
+  }
+  // [min, max, mutation sd, circular]
+  const CONT = {
+    hue: [0, 360, 12, true], shift: [-90, 90, 8], sat: [40, 95, 4], lum: [48, 78, 3],
+    point: [0, 1, .07], plen: [.55, 1.6, .06], pwid: [.25, .9, .04], height: [.35, 1.05, .05],
+    leaf: [0, 1, .06], leafHue: [70, 165, 5], curve: [-1, 1, .12], life: [.75, 1.35, .04], disk: [0, 1, .08]
+  };
+  const DISC = { petals: [3, 14], heads: [1, 4], layers: [1, 2] };
+  function cross(a, b) {
+    const g = {};
+    for (const k in CONT) {
+      const [lo, hi, m, circ] = CONT[k];
+      // mostly inherit one parent's trait, sometimes blend: keeps the garden from averaging to mud
+      const t = Math.random() < .6 ? (Math.random() < .5 ? 0 : 1) : Math.random();
+      let v;
+      if (circ) { const d = ((b[k] - a[k] + 540) % 360) - 180; v = a[k] + d * t; }
+      else v = lerp(a[k], b[k], t);
+      v += gauss() * m;
+      g[k] = circ ? ((v % 360) + 360) % 360 : clamp(v, lo, hi);
+    }
+    for (const k in DISC) {
+      const [lo, hi] = DISC[k];
+      let v = Math.random() < .5 ? a[k] : b[k];
+      if (Math.random() < .12) v += Math.random() < .5 ? -1 : 1;
+      g[k] = clamp(v, lo, hi);
+    }
+    return g;
+  }
+
+  // Botanical-ish names. Genus follows colour, so related flowers read as related.
+  const GENERA = ['Rubella', 'Aurantia', 'Solvia', 'Viridel', 'Glaucia', 'Thalassa', 'Caerula', 'Azurine', 'Ianthe', 'Violetta', 'Purpura', 'Carmina'];
+  const SY = ['bri', 'ca', 'del', 'fen', 'lu', 'mi', 'no', 'pha', 'ri', 'sel', 'ta', 've', 'xo', 'zu', 'or', 'an', 'il', 'mo', 'sa', 'the'];
+  const END = ['a', 'is', 'um', 'ens', 'ata', 'ella'];
+  function nameOf(g) {
+    const genus = GENERA[Math.floor(((g.hue + 15) % 360) / 30)];
+    const pt = Math.round(g.point * 4), ht = Math.round(g.height * 6), sh = Math.round((g.shift + 90) / 30);
+    const ep = SY[(g.petals * 7 + pt) % SY.length] + SY[(g.heads * 5 + ht * 3 + g.layers + sh) % SY.length] + END[(pt + g.layers) % END.length];
+    return genus + ' ' + ep;
+  }
+
+  // ---------- world state ----------
+  const CAP = 56, DAY = 200;
+  let W = 0, H = 0, DPR = 1, GT = 0;
+  let plants = [], moths = [], falling = [], pollen = [], flashes = [];
+  let births = 0, nextId = 1, simT = 0, deepest = 0, speed = 1, selected = null;
+  let stars = [], grass = [], hillsFar = [], hillsNear = [];
+
+  const phases = g => { const G = 22 * g.life, B = G + 40 * g.life; return { G, B, D: B + 14 }; };
+  function stageOf(p) {
+    const { G, B } = phases(p.g);
+    if (p.age < G * .8) return 'growing';
+    if (p.age < B) return 'bloom';
+    return 'seed';
+  }
+  const rootY = ny => GT + 14 + ny * (H - 84 - GT - 14);
+  const plantH = () => Math.min(H * .34, W * .8, 330);
+
+  function makePlant(nx, ny, g, gen, parents, age = 0) {
+    const p = { id: nextId++, nx, ny, g, gen, parents, age, seed: (Math.random() * 1e9) | 0, pollen: null, dropped: false, name: nameOf(g), hp: [] };
+    plants.push(p); births++; deepest = Math.max(deepest, gen);
+    plants.sort((a, b) => a.ny - b.ny);
+    return p;
+  }
+
+  function buildScenery() {
+    const r = rng(7);
+    stars = Array.from({ length: 90 }, () => ({ x: r(), y: r() * .9, s: .5 + r() * 1.2, tw: r() * 6 }));
+    grass = Array.from({ length: 150 }, () => ({ nx: r(), ny: r(), h: 5 + r() * 9, lean: r() - .5, hue: r() }));
+    grass.sort((a, b) => a.ny - b.ny);
+    const hill = (n, amp, seed) => { const q = rng(seed), f1 = 1 + q() * 2, f2 = 3 + q() * 4, o1 = q() * 6, o2 = q() * 6; return Array.from({ length: n + 1 }, (_, i) => { const x = i / n; return amp * (0.55 + .3 * Math.sin(x * f1 * 6.28 + o1) + .15 * Math.sin(x * f2 * 6.28 + o2)); }); };
+    hillsFar = hill(48, 1, 11); hillsNear = hill(48, .6, 23);
+  }
+
+  function resize() {
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    GT = H * .47;
+  }
+
+  // ---------- persistence (per-viewer convenience) ----------
+  const KEY = 'kindred-garden-v1';
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        simT, births, deepest, nextId,
+        plants: plants.map(p => ({ id: p.id, nx: p.nx, ny: p.ny, g: p.g, gen: p.gen, parents: p.parents, age: p.age, seed: p.seed, pollen: p.pollen, dropped: p.dropped, name: p.name }))
+      }));
+    } catch (e) { /* storage unavailable: the garden just won't persist */ }
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!s || !Array.isArray(s.plants) || !s.plants.length) return false;
+      simT = s.simT || 0; births = s.births || 0; deepest = s.deepest || 0; nextId = s.nextId || 1;
+      plants = s.plants.map(p => Object.assign(p, { hp: [] }));
+      plants.sort((a, b) => a.ny - b.ny);
+      return true;
+    } catch (e) { return false; }
+  }
+  function seedInitial() {
+    simT = DAY * .12;
+    for (let i = 0; i < 10; i++) {
+      const g = wild(), { B } = phases(g);
+      makePlant(R(.06, .94), R(.05, .95), g, 0, null, R(B * .25, B * .9));
+    }
+  }
+
+  // ---------- simulation ----------
+  function spawnMoth(x, y) {
+    moths.push({ x: x ?? (Math.random() < .5 ? -10 : W + 10), y: y ?? R(GT * .5, GT * 1.2), vx: 0, vy: 0, tgt: null, hi: 0, carry: null, last: -1, rest: 0, ph: R(0, 6.28), trailT: 0, wx: R(0, 1), wy: R(0, 1) });
+  }
+
+  function dropSeeds(p) {
+    p.dropped = true;
+    const head = p.hp[0] || { x: p.nx * W, y: rootY(p.ny) - 40 };
+    let kids = [];
+    if (p.pollen) {
+      const n = 1 + (Math.random() < .5 ? 1 : 0);
+      for (let i = 0; i < n; i++) kids.push({ g: cross(p.g, p.pollen.g), gen: Math.max(p.gen, p.pollen.gen) + 1, parents: [p.name, p.pollen.name] });
+    } else if (Math.random() < .3) {
+      kids.push({ g: cross(p.g, p.g), gen: p.gen + 1, parents: [p.name, 'self'] });
+    }
+    for (const k of kids) {
+      if (plants.length + falling.length >= CAP) break;
+      const nx = clamp(p.nx + R(-.14, .14), .03, .97), ny = clamp(p.ny + R(-.18, .18), .02, .98);
+      falling.push({ x0: head.x, y0: head.y, x1: nx * W, y1: rootY(ny), nx, ny, t: 0, dur: R(1.4, 2.4), k, hue: p.g.hue });
+    }
+  }
+
+  function update(dt) {
+    simT += dt;
+    for (const p of plants) {
+      p.age += dt;
+      const { B } = phases(p.g);
+      if (!p.dropped && p.age > B) dropSeeds(p);
+    }
+    const before = plants.length;
+    plants = plants.filter(p => p.age < phases(p.g).D);
+    if (selected && !plants.includes(selected)) closeCard();
+    if (before !== plants.length) plants.sort((a, b) => a.ny - b.ny);
+
+    for (const f of falling) f.t += dt;
+    for (const f of falling.filter(f => f.t >= f.dur)) makePlant(f.nx, f.ny, f.k.g, f.k.gen, f.k.parents, 0);
+    falling = falling.filter(f => f.t < f.dur);
+
+    if (!plants.length && !falling.length) for (let i = 0; i < 3; i++) makePlant(R(.1, .9), R(.1, .9), wild(), 0, null, 0);
+
+    // moths
+    const blooms = plants.filter(p => stageOf(p) === 'bloom' && p.hp.length);
+    const want = Math.min(10, 2 + Math.floor(blooms.length / 3));
+    if (moths.length < want && Math.random() < dt * .5) spawnMoth();
+
+    for (const m of moths) {
+      m.ph += dt;
+      if (m.rest > 0) {
+        m.rest -= dt;
+        const h = m.tgt && m.tgt.hp[m.hi];
+        if (h) { m.x = h.x; m.y = h.y - 2; }
+        if (m.rest <= 0) m.tgt = null;
+        continue;
+      }
+      if (m.tgt && (stageOf(m.tgt) !== 'bloom' || !m.tgt.hp[m.hi] || !plants.includes(m.tgt))) m.tgt = null;
+      if (!m.tgt && blooms.length) {
+        const pool = blooms.filter(p => p.id !== m.last);
+        if (pool.length) { m.tgt = pool[(Math.random() * pool.length) | 0]; m.hi = (Math.random() * m.tgt.hp.length) | 0; }
+      }
+      let tx, ty;
+      if (m.tgt) { const h = m.tgt.hp[m.hi]; tx = h.x; ty = h.y - 2; }
+      else { m.wx += dt * .05; m.wy += dt * .037; tx = W * (.5 + .45 * Math.sin(m.wx * 6.28 + m.ph * .1)); ty = GT * (.7 + .4 * Math.sin(m.wy * 6.28)); }
+      const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
+      const sp = 85, wob = 38;
+      const dvx = dx / d * sp + Math.sin(m.ph * 3.1) * wob, dvy = dy / d * sp + Math.cos(m.ph * 2.3) * wob;
+      m.vx += (dvx - m.vx) * Math.min(1, dt * 2.6); m.vy += (dvy - m.vy) * Math.min(1, dt * 2.6);
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      if (m.tgt && d < 7) {
+        const p = m.tgt;
+        if (m.carry && m.carry.id !== p.id && !p.pollen) {
+          p.pollen = { g: m.carry.g, name: m.carry.name, gen: m.carry.gen };
+          flashes.push({ x: m.x, y: m.y, t: 0, hue: m.carry.g.hue });
+        }
+        m.carry = { id: p.id, g: p.g, name: p.name, gen: p.gen };
+        m.last = p.id; m.rest = R(.7, 1.8);
+      }
+      if (m.carry) {
+        m.trailT -= dt;
+        if (m.trailT <= 0 && pollen.length < 400) { m.trailT = .05; pollen.push({ x: m.x + R(-2, 2), y: m.y + R(-2, 2), life: 1.3, hue: m.carry.g.hue }); }
+      }
+    }
+    for (const q of pollen) { q.life -= dt; q.y += dt * 6; }
+    pollen = pollen.filter(q => q.life > 0);
+    for (const f of flashes) f.t += dt;
+    flashes = flashes.filter(f => f.t < 1.2);
+  }
+
+  // ---------- rendering ----------
+  let light = 1, warm = 0;
+  function skyState() {
+    const dp = ((simT / DAY) + .3) % 1; // 0 = midnight
+    const sunH = -Math.cos(dp * Math.PI * 2);
+    light = smooth(-.22, .35, sunH);
+    warm = clamp(1 - Math.abs(sunH) / .32, 0, 1);
+    return { dp, sunH };
+  }
+  function timeLabel(dp) {
+    if (dp < .2 || dp > .78) return 'night';
+    if (dp < .3) return 'dawn';
+    if (dp < .7) return 'day';
+    return 'dusk';
+  }
+
+  function drawSky(t, dp, sunH) {
+    const top = mixc(mixc([22, 30, 54], [104, 158, 204], light), [86, 78, 128], warm * .5);
+    const bot = mixc(mixc([46, 56, 92], [206, 226, 232], light), [238, 160, 118], warm * .75);
+    const gr = ctx.createLinearGradient(0, 0, 0, GT + 10);
+    gr.addColorStop(0, rgb(top)); gr.addColorStop(1, rgb(bot));
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, GT + 10);
+
+    const sa = (1 - light) * .85;
+    if (sa > .02) {
+      for (const s of stars) {
+        ctx.fillStyle = `rgba(240,240,255,${sa * (.55 + .45 * Math.sin(t * 1.3 + s.tw))})`;
+        ctx.fillRect(s.x * W, s.y * GT * .85, s.s, s.s);
+      }
+    }
+    // sun and moon ride opposite arcs
+    const ang = dp * Math.PI * 2;
+    const body = (h, isSun) => {
+      if (h < -.15) return;
+      const x = W * (.5 - .4 * Math.sin(ang + (isSun ? 0 : Math.PI)));
+      const y = GT - h * GT * .78;
+      const r = isSun ? 16 : 11;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
+      const c = isSun ? [255, 226, 170] : [220, 228, 255];
+      glow.addColorStop(0, rgb(c, isSun ? .55 : .25)); glow.addColorStop(1, rgb(c, 0));
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, r * 5, 0, 7); ctx.fill();
+      ctx.fillStyle = isSun ? rgb(mixc([255, 190, 120], [255, 246, 220], light)) : 'rgba(236,238,250,.95)';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    };
+    body(sunH, true); body(-sunH, false);
+
+    const hills = (arr, base, amp, col) => {
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, GT + 12);
+      arr.forEach((h, i) => ctx.lineTo(i / (arr.length - 1) * W, base - h * amp));
+      ctx.lineTo(W, GT + 12); ctx.closePath(); ctx.fill();
+    };
+    hills(hillsFar, GT + 4, H * .07, rgb(mixc(mixc([40, 50, 78], [132, 162, 172], light), [150, 110, 120], warm * .4)));
+    hills(hillsNear, GT + 8, H * .045, rgb(mixc([30, 42, 50], [96, 128, 104], light)));
+  }
+
+  function drawGround() {
+    const g = ctx.createLinearGradient(0, GT, 0, H);
+    g.addColorStop(0, rgb(mixc([26, 38, 40], [92, 124, 82], light)));
+    g.addColorStop(1, rgb(mixc([14, 22, 22], [52, 80, 52], light)));
+    ctx.fillStyle = g; ctx.fillRect(0, GT + 6, W, H - GT);
+  }
+
+  function drawTuft(q, t, wind) {
+    const x = q.nx * W, y = rootY(q.ny), s = .55 + .6 * q.ny;
+    ctx.strokeStyle = `hsl(${95 + q.hue * 40},${28 + 10 * light}%,${14 + 20 * light}%)`;
+    ctx.lineWidth = 1.1 * s;
+    ctx.beginPath();
+    for (let i = -1; i <= 1; i++) {
+      const sw = Math.sin(t * 1.4 + q.nx * 20) * 2 * wind * s;
+      ctx.moveTo(x + i * 2 * s, y);
+      ctx.quadraticCurveTo(x + i * 3 * s, y - q.h * s * .6, x + i * 4 * s + q.lean * 5 * s + sw, y - q.h * s * (1 - Math.abs(i) * .25));
+    }
+    ctx.stroke();
+  }
+
+  function petalPath(L, w, pt) {
+    const k = 1 - .7 * pt, c2 = .75 + .2 * (1 - pt);
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(L * .25, -w, L * c2, -w * k, L, 0);
+    ctx.bezierCurveTo(L * c2, w * k, L * .25, w, 0, 0);
+  }
+
+  function drawFlower(x, y, r, open, wilt, g, rot, pollinated) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, .84); ctx.rotate(rot + wilt * .6);
+    const n = g.petals;
+    const L = r * g.plen * (.3 + .7 * open) * (1 - .45 * wilt);
+    const w = r * g.pwid * (.35 + .65 * open) * (1 - .3 * wilt);
+    const sat = g.sat * (1 - .65 * wilt), lum = g.lum * (1 - .3 * wilt);
+    for (let layer = 0; layer < g.layers; layer++) {
+      const sc = layer ? .62 : 1, off = layer ? Math.PI / n : 0;
+      ctx.fillStyle = layer ? `hsl(${g.hue + g.shift},${sat}%,${Math.min(88, lum + 8)}%)` : `hsl(${g.hue},${sat}%,${lum}%)`;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        ctx.save(); ctx.rotate(i / n * Math.PI * 2 + off);
+        petalPath(L * sc, w * sc, g.point);
+        ctx.restore();
+      }
+      ctx.fill();
+    }
+    // eye: a second hue near the centre gives each bloom its throat colour
+    ctx.fillStyle = `hsla(${g.hue + g.shift},${sat}%,${lum - 14}%,.75)`;
+    ctx.beginPath(); ctx.arc(0, 0, L * .34, 0, 7); ctx.fill();
+    ctx.fillStyle = g.disk < .5 ? `hsl(${42 + g.disk * 20},${78 - wilt * 40}%,${56 - wilt * 20}%)` : `hsl(${g.hue + 200},${28}%,${20}%)`;
+    ctx.beginPath(); ctx.arc(0, 0, Math.max(1.2, r * .2), 0, 7); ctx.fill();
+    if (pollinated && wilt < .3) {
+      ctx.fillStyle = 'rgba(255,222,120,.95)';
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283; ctx.beginPath(); ctx.arc(Math.cos(a) * r * .3, Math.sin(a) * r * .3, Math.max(.7, r * .05), 0, 7); ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
+  function drawSeedHead(x, y, r, k) {
+    ctx.fillStyle = `rgba(196,170,120,${.85 * k})`;
+    for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r * .32, y + Math.sin(a) * r * .26, Math.max(.8, r * .08), 0, 7); ctx.fill(); }
+    ctx.fillStyle = `rgba(120,96,64,${k})`;
+    ctx.beginPath(); ctx.arc(x, y, r * .2, 0, 7); ctx.fill();
+  }
+
+  function drawPlant(p, t, wind) {
+    const g = p.g, { G, B, D } = phases(g);
+    const s = .55 + .6 * p.ny, rx = p.nx * W, ry = rootY(p.ny);
+    const grow = easeOut(clamp(p.age / G, 0, 1));
+    const wilt = clamp((p.age - B) / (D - B), 0, 1);
+    const open = clamp((p.age - G * .8) / (G * .2 + 4), 0, 1);
+    const hh = Math.max(3, g.height * plantH() * s * grow * (1 - .22 * wilt));
+    const sway = Math.sin(t * 1.1 + p.nx * 9) * (5 + 9 * g.height) * s * wind * (reduce ? .3 : 1);
+    const droop = wilt * g.curve * 18 * s;
+
+    // soft contact shadow
+    ctx.fillStyle = 'rgba(0,0,0,.16)';
+    ctx.beginPath(); ctx.ellipse(rx, ry + 1, (6 + 8 * g.leaf) * s, 2.4 * s, 0, 0, 7); ctx.fill();
+
+    const P1x = rx + g.curve * 20 * s + sway * .3, P1y = ry - hh * .55;
+    const P2x = rx + g.curve * 12 * s + sway + droop, P2y = ry - hh + wilt * 10 * s;
+    const at = u => { const a = 1 - u; return [a * a * rx + 2 * a * u * P1x + u * u * P2x, a * a * ry + 2 * a * u * P1y + u * u * P2y]; };
+    const tan = u => Math.atan2(2 * (1 - u) * (P1y - ry) + 2 * u * (P2y - P1y), 2 * (1 - u) * (P1x - rx) + 2 * u * (P2x - P1x));
+
+    const stemC = `hsl(${lerp(g.leafHue, 42, wilt)},${34 - 8 * wilt}%,${30 + 6 * wilt}%)`;
+    ctx.strokeStyle = stemC; ctx.lineCap = 'round';
+    ctx.lineWidth = (1.1 + 2 * g.height) * s;
+    ctx.beginPath(); ctx.moveTo(rx, ry); ctx.quadraticCurveTo(P1x, P1y, P2x, P2y); ctx.stroke();
+
+    const r0 = rng(p.seed);
+    // leaves
+    const nl = 1 + Math.round(g.leaf * 4);
+    for (let i = 0; i < nl; i++) {
+      const u = .1 + .55 * r0(), side = i % 2 ? 1 : -1;
+      const [lx, ly] = at(u);
+      const len = (7 + 13 * g.leaf) * s * grow * (1 - .3 * wilt);
+      const a = tan(u) + side * (1.0 + .4 * r0()) + wilt * side * .5;
+      ctx.save(); ctx.translate(lx, ly); ctx.rotate(a);
+      ctx.fillStyle = `hsl(${lerp(g.leafHue + (r0() - .5) * 16, 44, wilt)},${40 - 12 * wilt}%,${26 + r0() * 12 + 6 * wilt}%)`;
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(len * .5, -len * .32, len, 0);
+      ctx.quadraticCurveTo(len * .5, len * .32, 0, 0); ctx.fill();
+      ctx.restore();
+    }
+
+    // flower heads: one on top, the rest on side branches
+    const heads = [[P2x, P2y, 1]];
+    for (let i = 1; i < g.heads; i++) {
+      const u = .45 + .35 * r0(), side = i % 2 ? 1 : -1;
+      const [bx, by] = at(u);
+      const bl = hh * (.22 + .18 * r0());
+      const ex = bx + side * bl * .75 + sway * .6 + droop * .6, ey = by - bl * (1 - .3 * wilt);
+      ctx.lineWidth = (.8 + 1.2 * g.height) * s;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + side * bl * .2, by - bl * .7, ex, ey); ctx.stroke();
+      heads.push([ex, ey, .72]);
+    }
+
+    p.hp.length = 0;
+    const rot = (p.seed % 628) / 100 + sway * .01;
+    for (const [hx, hy, k] of heads) {
+      const r = (7 + 7 * g.plen) * s * k;
+      if (grow < .55) continue;
+      if (open <= 0) {
+        ctx.fillStyle = `hsl(${lerp(g.leafHue, g.hue, .35)},40%,34%)`;
+        ctx.beginPath(); ctx.ellipse(hx, hy, r * .18 * grow, r * .28 * grow, 0, 0, 7); ctx.fill();
+        continue;
+      }
+      if (wilt < .75) drawFlower(hx, hy, r, open, wilt, g, rot + k, !!p.pollen);
+      if (wilt > .45) drawSeedHead(hx, hy, r, smooth(.45, .8, wilt));
+      if (open > .3) p.hp.push({ x: hx, y: hy, r });
+    }
+
+    if (p === selected) {
+      const h = heads[0];
+      ctx.strokeStyle = 'rgba(242,198,109,.9)'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.arc(h[0], h[1], (7 + 7 * g.plen) * s * 1.7, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  function drawSprout(f) {
+    const k = f.t / f.dur, e = k * k;
+    const x = lerp(f.x0, f.x1, k) + Math.sin(k * 9) * 6 * (1 - k), y = lerp(f.y0, f.y1, e);
+    ctx.fillStyle = `hsl(${f.hue},45%,${lerp(62, 40, k)}%)`;
+    ctx.beginPath(); ctx.arc(x, y, 1.8, 0, 7); ctx.fill();
+  }
+
+  function drawMoth(m, t) {
+    const f = Math.abs(Math.sin(t * 24 + m.ph * 5)) * (m.rest > 0 ? .35 : 1);
+    const night = 1 - light;
+    if (night > .15) {
+      const hue = m.carry ? m.carry.g.hue : 48;
+      const gl = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 14);
+      gl.addColorStop(0, `hsla(${hue},90%,75%,${.55 * night})`); gl.addColorStop(1, `hsla(${hue},90%,75%,0)`);
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(m.x, m.y, 14, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = `rgba(${lerp(90, 250, .5 + .5 * night) | 0},${lerp(80, 244, .5 + .5 * night) | 0},${lerp(70, 226, .5 + .5 * night) | 0},.95)`;
+    const dir = m.vx >= 0 ? 1 : -1;
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.ellipse(m.x - dir * .6, m.y + side * 2.2 * f, 3.4, 2.1 * f + .4, side * .5 * dir, 0, 7); ctx.fill();
+    }
+    ctx.beginPath(); ctx.ellipse(m.x, m.y, 2.2, .9, 0, 0, 7); ctx.fill();
+  }
+
+  function draw(t) {
+    const { dp, sunH } = skyState();
+    const wind = .6 + .4 * Math.sin(t * .13) + .25 * Math.sin(t * .71);
+    drawSky(t, dp, sunH);
+    drawGround();
+    // interleave grass and plants by depth
+    let gi = 0;
+    for (const p of plants) {
+      while (gi < grass.length && grass[gi].ny <= p.ny) drawTuft(grass[gi++], t, wind);
+      drawPlant(p, t, wind);
+    }
+    while (gi < grass.length) drawTuft(grass[gi++], t, wind);
+    for (const f of falling) drawSprout(f);
+
+    // night falls over everything except the moths and their pollen
+    const nightA = (1 - light) * .38;
+    if (nightA > .01) { ctx.fillStyle = `rgba(8,12,34,${nightA})`; ctx.fillRect(0, 0, W, H); }
+    if (warm > .01) { ctx.fillStyle = `rgba(255,150,90,${warm * .07})`; ctx.fillRect(0, 0, W, H); }
+
+    ctx.globalCompositeOperation = light < .5 ? 'lighter' : 'source-over';
+    for (const q of pollen) {
+      ctx.fillStyle = `hsla(${q.hue},85%,${light < .5 ? 70 : 60}%,${Math.min(1, q.life) * .8})`;
+      ctx.fillRect(q.x, q.y, 1.6, 1.6);
+    }
+    for (const f of flashes) {
+      const k = f.t / 1.2;
+      ctx.strokeStyle = `hsla(${f.hue},90%,75%,${1 - k})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 4 + k * 22, 0, 7); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const m of moths) drawMoth(m, t);
+    return dp;
+  }
+
+  // ---------- UI ----------
+  const $ = id => document.getElementById(id);
+  const card = $('card'), toast = $('toast');
+  let toastTimer = 0;
+  function say(msg) { toast.textContent = msg; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 2600); }
+
+  function describe(p) {
+    const g = p.g;
+    $('cName').textContent = p.name;
+    $('sw').style.background = `radial-gradient(circle at 50% 50%, hsl(${g.hue + g.shift},${g.sat}%,${g.lum - 8}%) 0 30%, hsl(${g.hue},${g.sat}%,${g.lum}%) 32%)`;
+    let gen;
+    if (!p.parents) gen = 'Wild · F0';
+    else if (p.parents[1] === 'self') gen = `F${p.gen} · self-sown`;
+    else gen = `F${p.gen} hybrid`;
+    $('cGen').textContent = gen;
+    $('cPar').textContent = !p.parents ? 'Unknown. It arrived on the wind.' : p.parents[1] === 'self' ? `${p.parents[0]}, self-pollinated` : `${p.parents[0]} × ${p.parents[1]}`;
+    const st = stageOf(p);
+    $('cNow').textContent = st === 'growing' ? 'Growing' : st === 'seed' ? (p.pollen ? 'Setting seed from a cross' : 'Going to seed') : (p.pollen ? `Blooming · pollinated by ${p.pollen.name}` : 'Blooming · waiting for a moth');
+    $('cTr').textContent = `${g.petals} petals${g.layers > 1 ? ', double' : ''} · ${g.point > .6 ? 'pointed' : g.point < .35 ? 'rounded' : 'ovate'} · ${g.heads} ${g.heads > 1 ? 'heads' : 'head'} · ${Math.round(g.height * 100)} cm`;
+  }
+  function openCard(p) { selected = p; describe(p); card.hidden = false; }
+  function closeCard() { selected = null; card.hidden = true; }
+  $('cClose').addEventListener('click', closeCard);
+
+  cv.addEventListener('pointerdown', e => {
+    const x = e.clientX, y = e.clientY;
+    // flowers first, nearest (front-most) first
+    for (let i = plants.length - 1; i >= 0; i--) {
+      const p = plants[i];
+      for (const h of p.hp) if (Math.hypot(h.x - x, h.y - y) < h.r * 1.3 + 8) { openCard(p); return; }
+    }
+    if (selected) { closeCard(); return; }
+    const top = rootY(0), bot = rootY(1);
+    if (y >= top - 6) {
+      if (plants.length + falling.length >= CAP) { say('The garden is full. Wait for a few flowers to go to seed.'); return; }
+      const ny = clamp((y - top) / (bot - top), 0, 1);
+      makePlant(clamp(x / W, .02, .98), ny, wild(), 0, null, 0);
+      say('A wild seed, planted.');
+    } else {
+      if (moths.length < 16) { spawnMoth(x, y); say('A moth joins the garden.'); }
+    }
+  });
+
+  $('bWild').addEventListener('click', () => {
+    let n = 0;
+    for (let i = 0; i < 5 && plants.length + falling.length < CAP; i++, n++) {
+      const nx = R(.05, .95), ny = R(.05, .95);
+      falling.push({ x0: nx * W + R(-40, 40), y0: -10, x1: nx * W, y1: rootY(ny), nx, ny, t: 0, dur: R(1.6, 2.8), k: { g: wild(), gen: 0, parents: null }, hue: R(0, 360) });
+    }
+    say(n ? `${n} wildflower seeds on the wind.` : 'The garden is full. Wait for a few flowers to go to seed.');
+  });
+  $('bSpeed').addEventListener('click', e => {
+    speed = speed === 1 ? 3 : speed === 3 ? 8 : 1;
+    e.currentTarget.textContent = speed + '×';
+  });
+
+  // ---------- loop ----------
+  resize(); buildScenery();
+  if (!load()) seedInitial();
+  // settle: let the garden compute flower positions and a moth or two before first paint
+  draw(0);
+  for (let i = 0; i < 3; i++) spawnMoth(R(0, W), R(GT * .6, GT * 1.1));
+
+  window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  setInterval(save, 8000);
+
+  let last = performance.now(), hudT = 0;
+  function frame(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const steps = speed;
+    for (let i = 0; i < steps; i++) update(dt);
+    const t = now / 1000;
+    const dp = draw(t);
+    hudT -= dt;
+    if (hudT <= 0) {
+      hudT = .5;
+      $('stats').innerHTML = `<b>${plants.length}</b> living · <b>${births}</b> born · deepest <b>F${deepest}</b> · ${timeLabel(dp)}`;
+      if (selected) describe(selected);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
